@@ -4,7 +4,7 @@
   const STORE_KEY = 'gymlog.v1';
   const TIMER_KEY = 'gymlog.timerEnd';
   const PRESETS = [60, 90, 120, 180];
-  const APP_VERSION = 'v21'; // sw.js の CACHE の番号と揃える
+  const APP_VERSION = 'v22'; // sw.js の CACHE の番号と揃える
   const VOLUMES = { mid: 0.5, high: 0.85, max: 1 }; // 休憩終了の音量
   const PARTS = ['胸', '背中', '肩', '腕', '脚', '腹', 'その他'];
   const NO_PART = '未分類';
@@ -511,6 +511,9 @@
       `main: ${rect('main')}`,
       `タイマー: ${rect('#timer')}`,
       `タブ: ${rect('.tabs')}`,
+      `音の状態: ${T.ctx ? T.ctx.state : 'なし'}`,
+      '--- タイマーの記録(新しい順) ---',
+      ...(() => { try { return JSON.parse(localStorage.getItem('gymlog.timerlog') || '[]').reverse(); } catch (e) { return []; } })(),
     ];
     $('#diag').textContent = lines.join('\n');
   }
@@ -717,7 +720,17 @@
   });
 
   /* ---------- タイマー ---------- */
-  const T = { endAt: 0, doneAt: 0, tickId: 0, ctx: null, wake: null };
+  const T = { endAt: 0, doneAt: 0, tickId: 0, ctx: null, wake: null, sched: null };
+  const LOG_KEY = 'gymlog.timerlog';
+  // 通知が鳴らなかった原因を後から調べるための記録(直近30件、この端末の中だけ)
+  function tlog(ev) {
+    try {
+      const log = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+      const d = new Date();
+      log.push(`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${ev} [音:${T.ctx ? T.ctx.state : 'なし'} 画面:${document.visibilityState}]`);
+      localStorage.setItem(LOG_KEY, JSON.stringify(log.slice(-30)));
+    } catch (e) { /* 無視 */ }
+  }
   try { T.endAt = Number(localStorage.getItem(TIMER_KEY)) || 0; } catch (e) { /* 無視 */ }
 
   const fmtTime = (sec) => `${Math.floor(sec / 60)}:${pad(sec % 60)}`;
@@ -903,26 +916,68 @@
     o.stop(ctx.currentTime + 1.2);
   }
 
-  function beep() {
-    if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 500]);
-    ensureAudio();
+  // 終了の音を when 秒後(音声時計の上)に鳴らす。止められるように、専用の音量ノードを返す。
+  // 先に予約しておけば、画面が暗くなって JS のタイマーが遅れても、音声側が時刻どおりに鳴らす
+  function playEnd(when) {
     const ctx = T.ctx;
-    if (!ctx) return;
+    if (!ctx) return null;
     const vol = VOLUMES[state.settings.volume] ?? VOLUMES.high;
     const master = ctx.createGain();
     master.gain.value = vol;
     const comp = ctx.createDynamicsCompressor();
     master.connect(comp).connect(ctx.destination);
-
+    const t0 = ctx.currentTime + when;
     if (state.settings.sound === 'custom' && customBuffer) {
       const src = ctx.createBufferSource();
       src.buffer = customBuffer;
       master.gain.value = vol * 2; // 録音された音は小さめのことが多いので持ち上げる
       src.connect(master);
-      src.start(ctx.currentTime + 0.35);
+      src.start(t0);
+    } else {
+      (SOUNDS[state.settings.sound] || SOUNDS.beep).play(ctx, master, t0);
+    }
+    return { master, comp, at: t0 };
+  }
+
+  function cancelSched() {
+    if (!T.sched) return;
+    try { T.sched.node.master.disconnect(); T.sched.node.comp.disconnect(); T.sched.ping.disconnect(); } catch (e) { /* 無視 */ }
+    T.sched = null;
+  }
+
+  // タイマー開始(や延長)のたびに、終了の音を予約し直す
+  function scheduleEnd() {
+    cancelSched();
+    const ctx = T.ctx;
+    if (!ctx || ctx.state !== 'running' || !T.endAt) return;
+    const left = (T.endAt - Date.now()) / 1000;
+    if (left <= 0) return;
+    const ping = ctx.createGain(); // Bluetooth イヤホンを起こす、聞こえないほど小さい音
+    ping.gain.value = 0.0005;
+    const o = ctx.createOscillator();
+    o.frequency.value = 440;
+    o.connect(ping).connect(ctx.destination);
+    o.start(ctx.currentTime + Math.max(0, left - 1.5));
+    o.stop(ctx.currentTime + left + 0.5);
+    const node = playEnd(left);
+    T.sched = { node, ping, endAt: T.endAt };
+    tlog(`予約 ${Math.round(left)}秒後`);
+  }
+
+  function beep() {
+    if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 500]);
+    // 予約した音が、すでに鳴っている(音声時計が終了時刻に届いた)なら、重ねて鳴らさない
+    const s = T.sched;
+    if (s && T.ctx && T.ctx.state === 'running' && T.ctx.currentTime >= s.node.at - 0.5) {
+      tlog('終了(予約の音が鳴った)');
+      T.sched = null;
       return;
     }
-    (SOUNDS[state.settings.sound] || SOUNDS.beep).play(ctx, master, ctx.currentTime + 0.35); // 頭が欠けないよう少し遅らせる
+    cancelSched();
+    ensureAudio();
+    if (!T.ctx) { tlog('終了(音の出力なし)'); return; }
+    tlog(`終了(その場で再生 / 予約=${s ? '音が止まっていた' : 'なし'})`);
+    playEnd(0.35);
   }
 
   async function requestWake() {
@@ -944,12 +999,15 @@
     T.endAt = Date.now() + secs * 1000;
     T.doneAt = 0;
     persistTimer();
+    scheduleEnd();
+    setTimeout(() => { if (T.endAt && !T.sched) scheduleEnd(); }, 400); // 音の準備が間に合わなかったとき
     requestWake();
     ensureTick();
     tick();
   }
 
   function stopTimer() {
+    cancelSched();
     T.endAt = 0;
     T.doneAt = 0;
     persistTimer();
@@ -968,7 +1026,7 @@
     let left = 0;
     if (T.endAt) {
       left = Math.ceil((T.endAt - Date.now()) / 1000);
-      if (left <= 2 && left > 0 && T.pingedFor !== T.endAt) {
+      if (left <= 2 && left > 0 && !T.sched && T.pingedFor !== T.endAt) {
         T.pingedFor = T.endAt;
         wakeAudioOutput();
       }
@@ -1016,13 +1074,16 @@
     if (!T.endAt) return;
     T.endAt += 30000;
     persistTimer();
+    scheduleEnd();
     tick();
   });
 
   document.addEventListener('visibilitychange', () => {
+    tlog(document.visibilityState === 'visible' ? '画面に戻った' : '画面が隠れた');
     if (document.visibilityState === 'visible') {
       ensureAudio();
       if (T.endAt) {
+        if (!T.sched) setTimeout(scheduleEnd, 400); // 止まっていた音を復帰できたら、予約し直す
         requestWake();
         tick();
       }
