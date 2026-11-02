@@ -236,9 +236,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 
 /* 今日のメニュー */
 .menu-card { padding: 12px 14px; margin-bottom: 14px; }
-.menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.menu-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .menu-head h2 { margin: 0; font-size: 15px; }
-.menu-head .btn { min-height: 36px; padding: 0 10px; font-size: 13px; }
+.menu-head .btn { min-height: 36px; padding: 0 12px; font-size: 13px; white-space: nowrap; }
 .menu-list { }
 .menu-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; color: inherit;
   background: transparent; border: 0; border-top: 1px solid #232a32; padding: 10px 2px; min-height: 48px; cursor: pointer; }
