@@ -202,7 +202,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
   flex: 0 0 auto;
   width: 100%; max-width: 560px; margin: 0 auto;
   height: calc(var(--tabs-h) + var(--safe-bottom)); padding-bottom: var(--safe-bottom);
-  display: grid; grid-template-columns: repeat(3, 1fr);
+  display: grid; grid-template-columns: repeat(4, 1fr);
   /* ホーム画面アプリでは、アプリの描画範囲の下に、iOS が塗る余白(色は --bg と同じ)ができる。
      タブバーを同じ色にして、その境目を目立たなくする */
   background: var(--bg); border-top: 1px solid var(--line);
@@ -239,7 +239,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .menu-head h2 { margin: 0; font-size: 15px; }
 .menu-head .btn { min-height: 36px; padding: 0 10px; font-size: 13px; }
-.menu-list { max-height: 34vh; overflow-y: auto; }
+.menu-list { }
 .menu-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; color: inherit;
   background: transparent; border: 0; border-top: 1px solid #232a32; padding: 10px 2px; min-height: 48px; cursor: pointer; }
 .menu-item:first-child { border-top: 0; }

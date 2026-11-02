@@ -4,7 +4,7 @@
   const STORE_KEY = 'gymlog.v1';
   const TIMER_KEY = 'gymlog.timerEnd';
   const PRESETS = [60, 90, 120, 180];
-  const APP_VERSION = 'v23'; // sw.js の CACHE の番号と揃える
+  const APP_VERSION = 'v24'; // sw.js の CACHE の番号と揃える
   const VOLUMES = { mid: 0.5, high: 0.85, max: 1 }; // 休憩終了の音量
   const PARTS = ['胸', '背中', '肩', '腕', '脚', '腹', 'その他'];
   const NO_PART = '未分類';
@@ -131,7 +131,7 @@
     document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${name}`));
     if (name === 'history') renderHistory();
     if (name === 'admin') renderAdmin();
-    if (name === 'record') renderRecord();
+    if (name === 'record' || name === 'menu') renderRecord();
     $('main').scrollTo(0, 0);
   }
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => showTab(t.dataset.tab)));
@@ -407,6 +407,7 @@
       $('#weight').value = it.weight;
       $('#reps').value = it.reps;
     }
+    showTab('record');
     toast(`${m.name}: ${fmtTarget(it)}`);
   }
 

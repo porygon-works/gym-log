@@ -21,8 +21,6 @@
   <main>
     <!-- 記録 -->
     <section id="view-record" class="view active" aria-label="記録">
-      <div id="menu-card" class="card menu-card"></div>
-
       <div id="record-empty" class="empty" hidden>
         <p>まだマシンが登録されていません。</p>
         <button class="btn primary" data-goto="admin">マシンを登録する</button>
@@ -92,6 +90,11 @@
         <div id="today-sets" class="card list"></div>
         </div>
       </div>
+    </section>
+
+    <!-- 今日のメニュー -->
+    <section id="view-menu" class="view" aria-label="今日のメニュー">
+      <div id="menu-card" class="card menu-card"></div>
     </section>
 
     <!-- 履歴 -->
@@ -192,6 +195,7 @@
 
   <nav class="tabs" aria-label="メニュー">
     <button class="tab active" data-tab="record" type="button">記録</button>
+    <button class="tab" data-tab="menu" type="button">メニュー</button>
     <button class="tab" data-tab="history" type="button">履歴</button>
     <button class="tab" data-tab="admin" type="button">管理</button>
   </nav>
