@@ -21,6 +21,8 @@
   <main>
     <!-- 記録 -->
     <section id="view-record" class="view active" aria-label="記録">
+      <div id="menu-card" class="card menu-card"></div>
+
       <div id="record-empty" class="empty" hidden>
         <p>まだマシンが登録されていません。</p>
         <button class="btn primary" data-goto="admin">マシンを登録する</button>
@@ -193,6 +195,22 @@
     <button class="tab" data-tab="history" type="button">履歴</button>
     <button class="tab" data-tab="admin" type="button">管理</button>
   </nav>
+
+  <!-- 今日のメニューの取り込み -->
+  <dialog id="menu-dialog" class="edit-dialog">
+    <form method="dialog" id="menu-form">
+      <h3>今日のメニューを貼り付け</h3>
+      <p class="muted">Claudeが出した「gymlog-menu」から始まるテキストを貼り付けてください。</p>
+      <textarea id="menu-text" rows="9" placeholder="gymlog-menu&#10;2026-11-02&#10;パワーレッグプレス 80kg×15 ×3"></textarea>
+      <div class="btn-row">
+        <button id="menu-paste" type="button" class="btn">貼り付け</button>
+      </div>
+      <div class="btn-row" style="margin-top:10px">
+        <button id="menu-cancel" type="button" class="btn">キャンセル</button>
+        <button type="submit" class="btn primary">取り込む</button>
+      </div>
+    </form>
+  </dialog>
 
   <!-- 記録の編集 -->
   <dialog id="edit-dialog" class="edit-dialog">

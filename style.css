@@ -233,3 +233,23 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .edit-dialog .field { margin-bottom: 12px; }
 .edit-dialog .btn-row { display: flex; gap: 10px; margin-top: 4px; }
 .edit-dialog .btn-row .btn { flex: 1; }
+
+/* 今日のメニュー */
+.menu-card { padding: 12px 14px; margin-bottom: 14px; }
+.menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.menu-head h2 { margin: 0; font-size: 15px; }
+.menu-head .btn { min-height: 36px; padding: 0 10px; font-size: 13px; }
+.menu-list { max-height: 34vh; overflow-y: auto; }
+.menu-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; color: inherit;
+  background: transparent; border: 0; border-top: 1px solid #232a32; padding: 10px 2px; min-height: 48px; cursor: pointer; }
+.menu-item:first-child { border-top: 0; }
+.menu-item .mi-main { flex: 1; min-width: 0; }
+.menu-item .mi-name { font-weight: 700; overflow-wrap: anywhere; }
+.menu-item .mi-target { font-size: 13px; color: var(--muted); }
+.menu-item .mi-prog { font-variant-numeric: tabular-nums; color: var(--muted); }
+.menu-item.done .mi-prog { color: var(--done); font-weight: 700; }
+.menu-item.unknown { opacity: .55; cursor: default; }
+.menu-item.current { background: rgba(255, 255, 255, .05); border-radius: 8px; }
+.menu-old { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
+.edit-dialog textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid #2a323b; background: #0f1317; color: inherit; margin-bottom: 10px; resize: vertical; }

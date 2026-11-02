@@ -4,7 +4,7 @@
   const STORE_KEY = 'gymlog.v1';
   const TIMER_KEY = 'gymlog.timerEnd';
   const PRESETS = [60, 90, 120, 180];
-  const APP_VERSION = 'v22'; // sw.js の CACHE の番号と揃える
+  const APP_VERSION = 'v23'; // sw.js の CACHE の番号と揃える
   const VOLUMES = { mid: 0.5, high: 0.85, max: 1 }; // 休憩終了の音量
   const PARTS = ['胸', '背中', '肩', '腕', '脚', '腹', 'その他'];
   const NO_PART = '未分類';
@@ -34,6 +34,7 @@
     lastMachine: null,
     lastPart: 'all', // 記録画面で選んでいる部位 ('all' = すべて)
     lastMode: 'strength', // 記録画面で選んでいる種類 ('strength' = 筋トレ / 'cardio' = 有酸素)
+    menu: null, // 今日のメニュー { date, items: [{ name, weight, reps, sets, distance, calories }] }
     owner: null, // クラウドと同期した Firebase ユーザーID
     // sound: 内蔵の音の名前(beep / chime / bell / arp / siren / coin) または 'custom' = 自分で選んだ音声ファイル(端末内に保存、同期しない)
     settings: { interval: 90, autoStart: true, step: 2.5, volume: 'high', sound: 'beep', soundName: '' },
@@ -62,7 +63,7 @@
   const noop = () => {};
   const Cloud = window.GymCloud || {
     init: noop, signIn: noop, signOut: noop, signedIn: false,
-    upsertMachine: noop, upsertSet: noop, removeSet: noop, removeMachineAndSets: noop, bulkUpsert: noop,
+    saveMenu: noop, clearMenu: noop, upsertMachine: noop, upsertSet: noop, removeSet: noop, removeMachineAndSets: noop, bulkUpsert: noop,
     saveToDrive: async () => { throw new Error('unavailable'); },
   };
 
@@ -180,6 +181,7 @@
   }
 
   function renderRecord() {
+    renderMenu();
     const has = state.machines.length > 0;
     $('#record-empty').hidden = has;
     $('#record-body').hidden = !has;
@@ -346,6 +348,122 @@
     }
     root.replaceChildren(...out);
   }
+
+  /* ---------- 今日のメニュー ---------- */
+  const normName = (n) => String(n).normalize('NFKC').replace(/\s+/g, '').toLowerCase();
+  function machineByName(name) {
+    const k = normName(name);
+    return state.machines.find((m) => normName(m.name) === k)
+      || state.machines.find((m) => normName(m.name).includes(k) || k.includes(normName(m.name))) || null;
+  }
+
+  // Claude が出す形式を読み取る。1行に1種目:
+  //   パワーレッグプレス 80kg×15 ×3     (重量×回数 ×セット数)
+  //   ランニングマシン 1km / 100kcal      (有酸素)
+  function parseMenu(text) {
+    const X = '[×xX*✕＊]';
+    const strengthRe = new RegExp(`^(.+?)\\s*[:：]?\\s+(自重|\\d+(?:\\.\\d+)?\\s*(?:kg|KG|Kg|㎏)?)\\s*${X}\\s*(\\d+)\\s*回?(?:\\s*${X}\\s*(\\d+)\\s*(?:セット|sets?)?)?\\s*$`);
+    const cardioRe = /^(.+?)\s*[:：]?\s+(\d+(?:\.\d+)?)\s*km(?:\s*[/／,、]?\s*(\d+(?:\.\d+)?)\s*kcal)?\s*$/i;
+    let date = dayKey(Date.now());
+    const items = [];
+    let skipped = 0;
+    for (let raw of String(text).split(/\r?\n/)) {
+      let line = raw.normalize('NFKC').trim().replace(/^[-・*•\d.)）]+\s+/, '').trim();
+      if (!line || line.startsWith('```') || /^gymlog-menu/i.test(line)) continue;
+      const dm = line.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+      if (dm) { date = `${dm[1]}-${pad(+dm[2])}-${pad(+dm[3])}`; continue; }
+      let m = line.match(cardioRe);
+      if (m) {
+        const it = { name: m[1].trim(), distance: parseFloat(m[2]) };
+        if (m[3] != null) it.calories = parseFloat(m[3]);
+        items.push(it);
+        continue;
+      }
+      m = line.match(strengthRe);
+      if (m) {
+        const w = m[2].startsWith('自重') ? 0 : parseFloat(m[2]);
+        items.push({ name: m[1].trim(), weight: w, reps: parseInt(m[3], 10), sets: m[4] ? parseInt(m[4], 10) : 1 });
+        continue;
+      }
+      skipped++;
+    }
+    return { menu: { date, items: items.slice(0, 40) }, skipped };
+  }
+
+  const isCardioItem = (it) => Number.isFinite(it.distance);
+  function fmtTarget(it) {
+    if (isCardioItem(it)) return `${fmtDist(it.distance)}${Number.isFinite(it.calories) ? ` / ${fmtCal(it.calories)}` : ''}`;
+    return `${fmtW(it.weight)} × ${it.reps}回 × ${it.sets}セット`;
+  }
+
+  function pickMenuItem(it, m) {
+    state.lastMode = isCardioItem(it) ? 'cardio' : 'strength';
+    state.lastPart = 'all';
+    selectMachine(m.id);
+    if (isCardioItem(it)) {
+      $('#distance').value = it.distance;
+      if (Number.isFinite(it.calories)) $('#calories').value = it.calories;
+    } else {
+      $('#weight').value = it.weight;
+      $('#reps').value = it.reps;
+    }
+    toast(`${m.name}: ${fmtTarget(it)}`);
+  }
+
+  function renderMenu() {
+    const box = $('#menu-card');
+    const menu = state.menu;
+    const openBtn = h('button', { class: 'btn', type: 'button', onclick: openMenuDialog }, menu ? '貼り付け直す' : '貼り付け');
+    if (!menu || !menu.items.length) {
+      box.replaceChildren(h('div', { class: 'menu-head' }, h('h2', {}, '今日のメニュー'), openBtn),
+        h('p', { class: 'muted', style: 'margin:0' }, 'Claudeが出したメニューを貼り付けると、ここに表示されます'));
+      return;
+    }
+    const today = dayKey(Date.now());
+    const clearBtn = h('button', { class: 'btn', type: 'button', onclick: () => {
+      if (!confirm('今日のメニューを消しますか?')) return;
+      state.menu = null; save(); Cloud.clearMenu(); renderMenu();
+    } }, '消す');
+    const rows = menu.items.map((it) => {
+      const m = machineByName(it.name);
+      const done = m ? state.sets.filter((s) => s.machineId === m.id && dayKey(s.ts) === today).length : 0;
+      const need = isCardioItem(it) ? 1 : it.sets;
+      const finished = !!m && done >= need;
+      return h('button', {
+        class: `menu-item${finished ? ' done' : ''}${m ? '' : ' unknown'}${m && m.id === selId ? ' current' : ''}`, type: 'button',
+        onclick: () => (m ? pickMenuItem(it, m) : toast(`「${it.name}」はマシン未登録です(管理タブで登録してください)`)),
+      },
+      h('div', { class: 'mi-main' },
+        h('div', { class: 'mi-name' }, it.name),
+        h('div', { class: 'mi-target' }, m ? fmtTarget(it) : `${fmtTarget(it)}(未登録)`)),
+      h('span', { class: 'mi-prog' }, finished ? '✓' : `${Math.min(done, need)}/${need}`));
+    });
+    box.replaceChildren(...[
+      h('div', { class: 'menu-head' }, h('h2', {}, `今日のメニュー(${dayLabel(menu.date)})`), h('div', { style: 'display:flex;gap:6px' }, openBtn, clearBtn)),
+      menu.date !== today ? h('p', { class: 'menu-old' }, '日付が今日ではありません。新しいメニューを貼り付けてください') : null,
+      h('div', { class: 'menu-list' }, rows),
+    ].filter(Boolean));
+  }
+
+  function openMenuDialog() {
+    $('#menu-text').value = '';
+    $('#menu-dialog').showModal();
+  }
+  $('#menu-cancel').addEventListener('click', () => $('#menu-dialog').close());
+  $('#menu-paste').addEventListener('click', async () => {
+    try { $('#menu-text').value = await navigator.clipboard.readText(); } catch (e) { toast('貼り付けできませんでした。入力欄を長押しして貼り付けてください'); }
+  });
+  $('#menu-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const { menu, skipped } = parseMenu($('#menu-text').value);
+    if (!menu.items.length) return toast('メニューを読み取れませんでした。形式を確認してください');
+    state.menu = menu;
+    save();
+    Cloud.saveMenu(menu);
+    $('#menu-dialog').close();
+    renderRecord();
+    toast(`${menu.items.length}種目を取り込みました${skipped ? `(読めない行が${skipped}行ありました)` : ''}`);
+  });
 
   /* ---------- 記録の編集(同じ内容のまとまり全体の重量・回数などを直す) ---------- */
   let editing = null;
@@ -1148,6 +1266,11 @@
       if (Date.now() - lastErrorAt < 3000) return;
       lastErrorAt = Date.now();
       toast(errorMessage(e));
+    },
+    onRemoteMenu: (menu) => {
+      state.menu = menu && menu.items.length ? menu : null;
+      save();
+      renderMenu();
     },
     onRemote: (kind, items) => {
       if (kind === 'machines') {
