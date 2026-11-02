@@ -42,17 +42,6 @@ service cloud.firestore {
             || request.resource.data.kind in ['strength', 'cardio']);
     }
 
-    // 今日のメニュー: users/{uid}/gymlog_menu/current に1件だけ置く
-    match /users/{uid}/gymlog_menu/{id} {
-      allow read, delete: if isOwner(uid);
-      allow create, update: if isOwner(uid)
-        && request.resource.data.keys().hasOnly(['date', 'items'])
-        && request.resource.data.date is string
-        && request.resource.data.date.size() <= 10
-        && request.resource.data.items is list
-        && request.resource.data.items.size() <= 40;
-    }
-
     match /users/{uid}/gymlog_sets/{id} {
       allow read, delete: if isOwner(uid);
       allow create, update: if isOwner(uid)

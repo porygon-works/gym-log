@@ -4,7 +4,7 @@
   const STORE_KEY = 'gymlog.v1';
   const TIMER_KEY = 'gymlog.timerEnd';
   const PRESETS = [60, 90, 120, 180];
-  const APP_VERSION = 'v24'; // sw.js の CACHE の番号と揃える
+  const APP_VERSION = 'v25'; // sw.js の CACHE の番号と揃える
   const VOLUMES = { mid: 0.5, high: 0.85, max: 1 }; // 休憩終了の音量
   const PARTS = ['胸', '背中', '肩', '腕', '脚', '腹', 'その他'];
   const NO_PART = '未分類';
@@ -34,7 +34,7 @@
     lastMachine: null,
     lastPart: 'all', // 記録画面で選んでいる部位 ('all' = すべて)
     lastMode: 'strength', // 記録画面で選んでいる種類 ('strength' = 筋トレ / 'cardio' = 有酸素)
-    menu: null, // 今日のメニュー { date, items: [{ name, weight, reps, sets, distance, calories }] }
+    menu: null, // 今日のメニュー(この端末だけに保存。同期しない) { date, items: [{ name, weight, reps, sets, distance, calories }] }
     owner: null, // クラウドと同期した Firebase ユーザーID
     // sound: 内蔵の音の名前(beep / chime / bell / arp / siren / coin) または 'custom' = 自分で選んだ音声ファイル(端末内に保存、同期しない)
     settings: { interval: 90, autoStart: true, step: 2.5, volume: 'high', sound: 'beep', soundName: '' },
@@ -63,7 +63,7 @@
   const noop = () => {};
   const Cloud = window.GymCloud || {
     init: noop, signIn: noop, signOut: noop, signedIn: false,
-    saveMenu: noop, clearMenu: noop, upsertMachine: noop, upsertSet: noop, removeSet: noop, removeMachineAndSets: noop, bulkUpsert: noop,
+    upsertMachine: noop, upsertSet: noop, removeSet: noop, removeMachineAndSets: noop, bulkUpsert: noop,
     saveToDrive: async () => { throw new Error('unavailable'); },
   };
 
@@ -423,7 +423,7 @@
     const today = dayKey(Date.now());
     const clearBtn = h('button', { class: 'btn', type: 'button', onclick: () => {
       if (!confirm('今日のメニューを消しますか?')) return;
-      state.menu = null; save(); Cloud.clearMenu(); renderMenu();
+      state.menu = null; save(); renderMenu();
     } }, '消す');
     const rows = menu.items.map((it) => {
       const m = machineByName(it.name);
@@ -460,7 +460,6 @@
     if (!menu.items.length) return toast('メニューを読み取れませんでした。形式を確認してください');
     state.menu = menu;
     save();
-    Cloud.saveMenu(menu);
     $('#menu-dialog').close();
     renderRecord();
     toast(`${menu.items.length}種目を取り込みました${skipped ? `(読めない行が${skipped}行ありました)` : ''}`);
@@ -1267,11 +1266,6 @@
       if (Date.now() - lastErrorAt < 3000) return;
       lastErrorAt = Date.now();
       toast(errorMessage(e));
-    },
-    onRemoteMenu: (menu) => {
-      state.menu = menu && menu.items.length ? menu : null;
-      save();
-      renderMenu();
     },
     onRemote: (kind, items) => {
       if (kind === 'machines') {

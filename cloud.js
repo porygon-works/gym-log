@@ -85,15 +85,7 @@
       if (snap.metadata.fromCache && snap.empty && hooks.getLocal()[name].length) return;
       hooks.onRemote(name, snap.docs.map((d) => ({ id: d.id, ...toItem(d.data()) })));
     }, (err) => hooks.onError(err));
-    // 今日のメニュー(1件だけ)。オフラインで空のキャッシュが返ってきたときは、手元のメニューを消さない
-    const menuDoc = col('menu').doc('current');
-    const unsubMenu = menuDoc.onSnapshot({ includeMetadataChanges: true }, (snap) => {
-      if (snap.metadata.fromCache && !snap.exists) return;
-      const d = snap.exists ? snap.data() : null;
-      hooks.onRemoteMenu(d && Array.isArray(d.items) ? { date: String(d.date || ''), items: d.items } : null);
-    }, (err) => hooks.onError(err));
     unsubs = [
-      unsubMenu,
       watch('machines', (d) => ({
         name: String(d.name ?? ''), createdAt: Number(d.createdAt) || 0,
         part: typeof d.part === 'string' ? d.part : '', kind: d.kind === 'cardio' ? 'cardio' : 'strength',
@@ -225,8 +217,6 @@
       return { updated: !!existing };
     },
 
-    saveMenu(menu) { if (user) guard(col('menu').doc('current').set({ date: menu.date, items: menu.items })); },
-    clearMenu() { if (user) guard(col('menu').doc('current').delete()); },
     upsertMachine(m) { if (user) guard(col('machines').doc(m.id).set(machineData(m))); },
     upsertSet(s) { if (user) guard(col('sets').doc(s.id).set(setData(s))); },
     removeSet(id) { if (user) guard(col('sets').doc(id).delete()); },
